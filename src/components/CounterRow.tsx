@@ -124,7 +124,7 @@ export default function CounterRow({
       >
         <TextInput
           style={styles.nameInput}
-          placeholder="输入姓名"
+          placeholder="输入计数项"
           placeholderTextColor="#C7C7CD"
           value={item.name}
           onChangeText={(text) => onNameChange(item.id, text)}
