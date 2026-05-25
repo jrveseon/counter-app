@@ -3,10 +3,13 @@ import {
   StyleSheet,
   View,
   Text,
-  FlatList,
   Platform,
   KeyboardAvoidingView,
 } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import DraggableFlatList, {
+  RenderItemParams,
+} from 'react-native-draggable-flatlist';
 import { StatusBar } from 'expo-status-bar';
 import CounterRow from './src/components/CounterRow';
 import AddButton from './src/components/AddButton';
@@ -78,9 +81,23 @@ export default function App() {
     );
   }, []);
 
-  const renderItem = ({ item }: { item: CounterItem }) => (
+  const handleDragEnd = useCallback(
+    ({ from, to }: { from: number; to: number }) => {
+      setItems((prev) => {
+        const newItems = [...prev];
+        const [removed] = newItems.splice(from, 1);
+        newItems.splice(to, 0, removed);
+        return newItems;
+      });
+    },
+    []
+  );
+
+  const renderItem = ({ item, drag, isActive }: RenderItemParams<CounterItem>) => (
     <CounterRow
       item={item}
+      drag={drag}
+      isActive={isActive}
       onNameChange={handleNameChange}
       onIncrement={handleIncrement}
       onDecrement={handleDecrement}
@@ -97,7 +114,7 @@ export default function App() {
   );
 
   return (
-    <View style={styles.root}>
+    <GestureHandlerRootView style={styles.root}>
       <StatusBar style="dark" />
       <KeyboardAvoidingView
         style={styles.root}
@@ -109,10 +126,11 @@ export default function App() {
             <Text style={styles.headerCount}>{items.length} 项</Text>
           )}
         </View>
-        <FlatList
+        <DraggableFlatList
           data={items}
           renderItem={renderItem}
           keyExtractor={(item) => item.id}
+          onDragEnd={handleDragEnd}
           ListEmptyComponent={renderEmpty}
           contentContainerStyle={items.length === 0 ? styles.listEmpty : undefined}
           keyboardShouldPersistTaps="handled"
@@ -121,7 +139,7 @@ export default function App() {
           <AddButton onPress={addItem} />
         </View>
       </KeyboardAvoidingView>
-    </View>
+    </GestureHandlerRootView>
   );
 }
 

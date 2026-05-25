@@ -1,9 +1,10 @@
-import React, { useRef, useState, useCallback } from 'react';
+import React, { useRef, useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
   TextInput,
   TouchableOpacity,
+  Pressable,
   StyleSheet,
   Animated,
   PanResponder,
@@ -19,6 +20,8 @@ const SWIPE_THRESHOLD = 80;
 
 interface CounterRowProps {
   item: CounterItem;
+  drag?: () => void;
+  isActive?: boolean;
   onNameChange: (id: string, name: string) => void;
   onIncrement: (id: string) => void;
   onDecrement: (id: string) => void;
@@ -28,6 +31,8 @@ interface CounterRowProps {
 
 export default function CounterRow({
   item,
+  drag,
+  isActive,
   onNameChange,
   onIncrement,
   onDecrement,
@@ -39,10 +44,16 @@ export default function CounterRow({
   const [showCountModal, setShowCountModal] = useState(false);
   const [countInput, setCountInput] = useState(String(item.count));
 
+  // Ref to track isActive for PanResponder closures
+  const isActiveRef = useRef(isActive);
+  isActiveRef.current = isActive;
+
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (_, gesture) => {
+        // Disable swipe when dragging to reorder
+        if (isActiveRef.current) return false;
         // Only respond to horizontal swipes
         return Math.abs(gesture.dx) > 10 && Math.abs(gesture.dx) > Math.abs(gesture.dy);
       },
@@ -51,12 +62,14 @@ export default function CounterRow({
         translateX.setValue(0);
       },
       onPanResponderMove: (_, gesture) => {
+        if (isActiveRef.current) return;
         // Only allow swiping left (negative dx)
         if (gesture.dx < 0) {
           translateX.setValue(Math.max(gesture.dx, -SWIPE_THRESHOLD));
         }
       },
       onPanResponderRelease: (_, gesture) => {
+        if (isActiveRef.current) return;
         translateX.flattenOffset();
         if (gesture.dx < -50) {
           // Show delete button
@@ -83,6 +96,14 @@ export default function CounterRow({
       },
     })
   ).current;
+
+  // Reset swipe state when drag starts
+  useEffect(() => {
+    if (isActive) {
+      translateX.setValue(0);
+      setShowDeleteButton(false);
+    }
+  }, [isActive, translateX]);
 
   const handleDelete = useCallback(() => {
     Animated.timing(translateX, {
@@ -117,39 +138,48 @@ export default function CounterRow({
         </TouchableOpacity>
       </View>
 
-      {/* Main row with animated translate */}
-      <Animated.View
-        style={[styles.container, { transform: [{ translateX }] }]}
-        {...panResponder.panHandlers}
+      {/* Main row with animated translate and long-press drag */}
+      <Pressable
+        onLongPress={drag}
+        delayLongPress={400}
       >
-        <TextInput
-          style={styles.nameInput}
-          placeholder="输入计数项"
-          placeholderTextColor="#C7C7CD"
-          value={item.name}
-          onChangeText={(text) => onNameChange(item.id, text)}
-          clearButtonMode="while-editing"
-        />
-        <View style={styles.controls}>
-          <TouchableOpacity
-            style={styles.button}
-            onPress={() => onDecrement(item.id)}
-          >
-            <Text style={styles.buttonText}>−</Text>
-          </TouchableOpacity>
+        <Animated.View
+          style={[
+            styles.container,
+            { transform: [{ translateX }] },
+            isActive && styles.activeContainer,
+          ]}
+          {...panResponder.panHandlers}
+        >
+          <TextInput
+            style={styles.nameInput}
+            placeholder="输入计数项"
+            placeholderTextColor="#C7C7CD"
+            value={item.name}
+            onChangeText={(text) => onNameChange(item.id, text)}
+            clearButtonMode="while-editing"
+          />
+          <View style={styles.controls}>
+            <TouchableOpacity
+              style={styles.button}
+              onPress={() => onDecrement(item.id)}
+            >
+              <Text style={styles.buttonText}>−</Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity style={styles.countContainer} onPress={handleCountPress}>
-            <Text style={styles.countText}>{item.count}</Text>
-          </TouchableOpacity>
+            <TouchableOpacity style={styles.countContainer} onPress={handleCountPress}>
+              <Text style={styles.countText}>{item.count}</Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.button, styles.plusButton]}
-            onPress={() => onIncrement(item.id)}
-          >
-            <Text style={[styles.buttonText, styles.plusButtonText]}>+</Text>
-          </TouchableOpacity>
-        </View>
-      </Animated.View>
+            <TouchableOpacity
+              style={[styles.button, styles.plusButton]}
+              onPress={() => onIncrement(item.id)}
+            >
+              <Text style={[styles.buttonText, styles.plusButtonText]}>+</Text>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+      </Pressable>
 
       {/* Count edit modal */}
       <Modal
@@ -228,6 +258,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#E5E5E5',
+  },
+  activeContainer: {
+    backgroundColor: '#F0F0F5',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 6,
+    transform: [{ scale: 1.02 }],
   },
   nameInput: {
     flex: 1,
