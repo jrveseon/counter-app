@@ -1,4 +1,4 @@
-import React, { useRef, useState, useCallback, useEffect } from 'react';
+import React, { useRef, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -20,41 +20,36 @@ const SWIPE_THRESHOLD = 80;
 
 interface CounterRowProps {
   item: CounterItem;
-  drag?: () => void;
-  isActive?: boolean;
   onNameChange: (id: string, name: string) => void;
   onIncrement: (id: string) => void;
   onDecrement: (id: string) => void;
   onCountEdit: (id: string, count: number) => void;
   onDelete: (id: string) => void;
+  onDragStart?: () => void;
+  isDragging?: boolean;
 }
 
 export default function CounterRow({
   item,
-  drag,
-  isActive,
   onNameChange,
   onIncrement,
   onDecrement,
   onCountEdit,
   onDelete,
+  onDragStart,
+  isDragging,
 }: CounterRowProps) {
   const translateX = useRef(new Animated.Value(0)).current;
-  const [showDeleteButton, setShowDeleteButton] = useState(false);
   const [showCountModal, setShowCountModal] = useState(false);
   const [countInput, setCountInput] = useState(String(item.count));
-
-  // Ref to track isActive for PanResponder closures
-  const isActiveRef = useRef(isActive);
-  isActiveRef.current = isActive;
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (_, gesture) => {
-        // Disable swipe when dragging to reorder
-        if (isActiveRef.current) return false;
-        // Only respond to horizontal swipes
+        // Only respond to horizontal swipes, ignore if dragging
+        if (isDragging) return false;
         return Math.abs(gesture.dx) > 10 && Math.abs(gesture.dx) > Math.abs(gesture.dy);
       },
       onPanResponderGrant: () => {
@@ -62,29 +57,22 @@ export default function CounterRow({
         translateX.setValue(0);
       },
       onPanResponderMove: (_, gesture) => {
-        if (isActiveRef.current) return;
-        // Only allow swiping left (negative dx)
         if (gesture.dx < 0) {
           translateX.setValue(Math.max(gesture.dx, -SWIPE_THRESHOLD));
         }
       },
       onPanResponderRelease: (_, gesture) => {
-        if (isActiveRef.current) return;
         translateX.flattenOffset();
         if (gesture.dx < -50) {
-          // Show delete button
           Animated.spring(translateX, {
             toValue: -SWIPE_THRESHOLD,
             useNativeDriver: true,
           }).start();
-          setShowDeleteButton(true);
         } else {
-          // Snap back
           Animated.spring(translateX, {
             toValue: 0,
             useNativeDriver: true,
           }).start();
-          setShowDeleteButton(false);
         }
       },
       onPanResponderTerminate: () => {
@@ -92,18 +80,9 @@ export default function CounterRow({
           toValue: 0,
           useNativeDriver: true,
         }).start();
-        setShowDeleteButton(false);
       },
     })
   ).current;
-
-  // Reset swipe state when drag starts
-  useEffect(() => {
-    if (isActive) {
-      translateX.setValue(0);
-      setShowDeleteButton(false);
-    }
-  }, [isActive, translateX]);
 
   const handleDelete = useCallback(() => {
     Animated.timing(translateX, {
@@ -129,6 +108,19 @@ export default function CounterRow({
     Keyboard.dismiss();
   }, [countInput, item.id, onCountEdit]);
 
+  const handleLongPress = useCallback(() => {
+    if (onDragStart && !showCountModal) {
+      onDragStart();
+    }
+  }, [onDragStart, showCountModal]);
+
+  const dragHandlers = onDragStart
+    ? {
+        onLongPress: handleLongPress,
+        delayLongPress: 400,
+      }
+    : {};
+
   return (
     <View style={styles.wrapper}>
       {/* Delete background visible on swipe */}
@@ -139,15 +131,12 @@ export default function CounterRow({
       </View>
 
       {/* Main row with animated translate and long-press drag */}
-      <Pressable
-        onLongPress={drag}
-        delayLongPress={400}
-      >
+      <Pressable {...dragHandlers}>
         <Animated.View
           style={[
             styles.container,
             { transform: [{ translateX }] },
-            isActive && styles.activeContainer,
+            isDragging && styles.dragging,
           ]}
           {...panResponder.panHandlers}
         >
@@ -259,13 +248,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#E5E5E5',
   },
-  activeContainer: {
-    backgroundColor: '#F0F0F5',
+  dragging: {
+    backgroundColor: '#FFFFFF',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.2,
     shadowRadius: 8,
-    elevation: 6,
+    elevation: 8,
     transform: [{ scale: 1.02 }],
   },
   nameInput: {
