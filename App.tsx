@@ -1,20 +1,28 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   StyleSheet,
   View,
   Text,
   Platform,
   KeyboardAvoidingView,
+  LayoutAnimation,
+  UIManager,
 } from 'react-native';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import DraggableFlatList, {
   RenderItemParams,
+  ScaleDecorator,
 } from 'react-native-draggable-flatlist';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StatusBar } from 'expo-status-bar';
 import CounterRow from './src/components/CounterRow';
 import AddButton from './src/components/AddButton';
 import { CounterItem } from './src/types';
 import { loadItems, saveItems } from './src/utils/storage';
+
+// Enable LayoutAnimation on Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 let idCounter = Date.now();
 function generateId(): string {
@@ -82,35 +90,39 @@ export default function App() {
   }, []);
 
   const handleDragEnd = useCallback(
-    ({ from, to }: { from: number; to: number }) => {
-      setItems((prev) => {
-        const newItems = [...prev];
-        const [removed] = newItems.splice(from, 1);
-        newItems.splice(to, 0, removed);
-        return newItems;
-      });
+    ({ data }: { data: CounterItem[] }) => {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setItems(data);
     },
     []
   );
 
-  const renderItem = ({ item, drag, isActive }: RenderItemParams<CounterItem>) => (
-    <CounterRow
-      item={item}
-      drag={drag}
-      isActive={isActive}
-      onNameChange={handleNameChange}
-      onIncrement={handleIncrement}
-      onDecrement={handleDecrement}
-      onCountEdit={handleCountEdit}
-      onDelete={handleDelete}
-    />
+  const renderItem = useCallback(
+    ({ item, drag, isActive }: RenderItemParams<CounterItem>) => (
+      <ScaleDecorator>
+        <CounterRow
+          item={item}
+          onNameChange={handleNameChange}
+          onIncrement={handleIncrement}
+          onDecrement={handleDecrement}
+          onCountEdit={handleCountEdit}
+          onDelete={handleDelete}
+          onDragStart={drag}
+          isDragging={isActive}
+        />
+      </ScaleDecorator>
+    ),
+    [handleNameChange, handleIncrement, handleDecrement, handleCountEdit, handleDelete]
   );
 
-  const renderEmpty = () => (
-    <View style={styles.emptyContainer}>
-      <Text style={styles.emptyIcon}>📋</Text>
-      <Text style={styles.emptyText}>点击下方 + 按钮添加新的计数项</Text>
-    </View>
+  const renderEmpty = useCallback(
+    () => (
+      <View style={styles.emptyContainer}>
+        <Text style={styles.emptyIcon}>📋</Text>
+        <Text style={styles.emptyText}>点击下方 + 按钮添加新的计数项</Text>
+      </View>
+    ),
+    []
   );
 
   return (
@@ -123,17 +135,18 @@ export default function App() {
         <View style={styles.header}>
           <Text style={styles.headerTitle}>计数器</Text>
           {items.length > 0 && (
-            <Text style={styles.headerCount}>{items.length} 项</Text>
+            <Text style={styles.headerCount}>{items.length} 项 · 长按拖动排序</Text>
           )}
         </View>
         <DraggableFlatList
           data={items}
           renderItem={renderItem}
           keyExtractor={(item) => item.id}
-          onDragEnd={handleDragEnd}
           ListEmptyComponent={renderEmpty}
           contentContainerStyle={items.length === 0 ? styles.listEmpty : undefined}
           keyboardShouldPersistTaps="handled"
+          onDragEnd={handleDragEnd}
+          activationDistance={10}
         />
         <View style={styles.footer}>
           <AddButton onPress={addItem} />
